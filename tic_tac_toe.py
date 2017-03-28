@@ -1,13 +1,19 @@
 import abc
 import copy
+import numpy as np
+import random
+
+from graph import export_pdf
+from sklearn import tree
 
 cell_empty = 0
 cell_X = 1
 cell_0 = 2
 draw = 3
 
-feature_names = ["side", "field"]
-target_names = ["Move"]
+feature_names = ["side", "r1c1", "r1c2", "r1c3", "r2c1", "r2c2", "r2c3", "r3c1", "r3c2", "r3c3"]
+target_names = ["r1c1", "r1c2", "r1c3", "r2c1", "r2c2", "r2c3", "r3c1", "r3c2", "r3c3"]
+
 
 def print_field(field):
     output = ""
@@ -57,13 +63,19 @@ class Player(object):
         return None
 
     def random(self, field):
+        empty = []
+
         for i in range(len(field)):
             row = field[i]
             for j in range(len(row)):
                 if row[j] == cell_empty:
-                    return [i, j]
+                    empty.append([i, j])
 
-        return None
+        if len(empty) == 0:
+            return None
+
+        index = random.randint(0, len(empty) - 1)
+        return empty[index]
 
     def random_from_list(self, field, points):
         if (not points or
@@ -107,6 +119,11 @@ class Player(object):
 
 
 class Human(Player):
+
+    def __init__(self, order):
+        super(Human, self).__init__(order)
+        print("Human player constructed")
+
     def make_move(self, field):
         print_field(field)
 
@@ -117,13 +134,52 @@ class Human(Player):
         return [x, y]
 
 
+class AI(Player):
+
+    def __init__(self, order, data_x, data_y):
+        super(AI, self).__init__(order)
+        self.clf = tree.DecisionTreeClassifier()
+        self.clf.fit(data_x, data_y)
+        print("AI player constructed")
+
+    def train(self, x, y):
+        self.clf.fit(x, y)
+
+    def make_move(self, field):
+        sample = [self.order]
+        for i in range(len(field)):
+            row = field[i]
+            for j in range(len(row)):
+                sample.append(field[i][j])
+
+        try:
+            result = self.clf.predict(np.array(sample).reshape(1, -1))
+        except DeprecationWarning:
+            # just ignore it
+            nothing = True
+
+        x = result[0] // 3
+        y = result[0] % 3
+        if field[x][y] != cell_empty:
+            return self.random(field)
+
+        return [x, y]
+
+
 class Algorithm(Player):
 
-    def __init__(self, order):
+    def __init__(self, order, accuracy):
+        self.accuracy = accuracy
+        self.o_position1 = -1
+        self.o_position2 = -1
         super(Algorithm, self).__init__(order)
         print("Algorithm player constructed")
 
     def make_move(self, field):
+        dice = random.randint(0,99)
+        if dice > self.accuracy:
+            return self.random(field)
+
         x_loc = []
         o_loc = []
         for i in range(len(field)):
@@ -205,7 +261,7 @@ class Algorithm(Player):
                 if side_count > 1:
                     return self.random_corner(field)
 
-                return self.random_side()
+                return self.random_side(field)
             elif stage == 2:
                 chance = self.try_win(field)
                 if chance:
@@ -219,43 +275,148 @@ class Algorithm(Player):
 
         return self.random(field)
 
-def play_game(player_x, player_o):
+
+def play_game(player_1, player_2):
+    if player_1.order == player_2.order:
+        raise Exception("Players have same side")
+
+    if player_1.order == cell_empty or player_2.order == cell_empty:
+        raise Exception("One of the players has no side")
+
+    if player_1.order == cell_X:
+        player_x = player_1
+        player_o = player_2
+    else:
+        player_x = player_2
+        player_o = player_1
+
     field = [
             [0, 0, 0],
             [0, 0, 0],
             [0, 0, 0]
             ]
 
+    x_moves = []
+    o_moves = []
+
     result = 0
     stage = 0
     while result == 0:
+        local_field = copy.deepcopy(field)
+
         if stage % 2 == 0:
             move = player_x.make_move(field)
+            print("Player X does " + str(move))
             if field[move[0]][move[1]] != cell_empty:
-                return cell_0
+                return cell_0, x_moves, o_moves
 
+            x_moves.append([local_field, move])
             field[move[0]][move[1]] = cell_X
         else:
             move = player_o.make_move(field)
+            print("Player 0 does " + str(move))
             if field[move[0]][move[1]] != cell_empty:
-                return cell_X
+                return cell_X, x_moves, o_moves
 
+            o_moves.append([local_field, move])
             field[move[0]][move[1]] = cell_0
 
         stage += 1
         result = test_win(field)
 
-    return result
+    return result, x_moves, o_moves
 
-algo = Algorithm(cell_X)
-algo2 = Algorithm(cell_0)
-human = Human(cell_0)
+algo = Algorithm(cell_X, 100)
+algo2 = Algorithm(cell_0, 100)
 field = [
         [1, 1, 2],
         [2, 1, 0],
         [0, 1, 2]
         ]
 
-print(play_game(algo, human))
+res, x_moves, o_moves = play_game(algo, algo2)
 
-# print(human.make_move(field))
+def dummy_data():
+    data = []
+
+    sample = [cell_0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    sample_2 = [cell_X, 1, 0, 0, 0, 0, 0, 0, 0, 0]
+    for i in range(9):
+        data.append([sample, i])
+        data.append([sample_2, i])
+
+    return data
+
+
+def add_moves_to_data(data, moves, side):
+    for move in moves:
+        field = move[0]
+        sample = [side]
+        for i in range(len(field)):
+            row = field[i]
+            for j in range(len(row)):
+                sample.append(field[i][j])
+
+        target = move[1][0] * 3 + move[1][1]
+        data.append([sample, target])
+
+
+def column(matrix, i):
+    return [row[i] for row in matrix]
+
+data = []
+add_moves_to_data(data, o_moves, cell_0)
+add_moves_to_data(data, x_moves, cell_X)
+add_moves_to_data(data, o_moves, cell_0)
+
+dummy = dummy_data()
+data_array = np.array(data)
+ai = AI(cell_X, column(dummy, 0), column(dummy, 1))
+
+export_pdf(ai.clf, feature_names, target_names, "X_0.pdf")
+
+human = Human(cell_0)
+# print(play_game(human, ai))
+
+ai.train(column(data_array, 0), column(data_array, 1))
+ai.order = cell_0
+human.order = cell_X
+# print(play_game(human, ai))
+
+ai_win = algo_win = draw_c = 0
+test_ai = AI(cell_X, column(dummy, 0), column(dummy, 1))
+test_algo = Algorithm(cell_0, 50)
+data = []
+for i in range(1000):
+    result, ai_moves, algo_moves = play_game(test_ai, test_algo)
+
+    if result == draw:
+        draw_c += 1
+        if test_ai.order == cell_0:
+            add_moves_to_data(data, ai_moves, cell_0)
+    else:
+        if test_ai.order == result:
+            ai_win += 1
+            add_moves_to_data(data, ai_moves, result)
+        else:
+            algo_win += 1
+            add_moves_to_data(data, algo_moves, result)
+
+    data_array = np.array(data)
+    test_ai.train(column(data_array, 0), column(data_array, 1))
+
+    if test_ai.order == cell_X:
+        test_ai.order = cell_0
+    else:
+        test_ai.order = cell_X
+
+    if test_algo.order == cell_X:
+        test_algo.order = cell_0
+    else:
+        test_algo.order = cell_X
+
+print("AI wins: {}; Algorithm wins {}; Draws {}".format(ai_win, algo_win, draw_c))
+
+test_ai.order = cell_0
+human.order = cell_X
+print(play_game(human, test_ai))
