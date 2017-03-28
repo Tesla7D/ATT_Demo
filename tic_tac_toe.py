@@ -176,7 +176,7 @@ class Algorithm(Player):
         print("Algorithm player constructed")
 
     def make_move(self, field):
-        dice = random.randint(0,99)
+        dice = random.randint(0, 99)
         if dice > self.accuracy:
             return self.random(field)
 
@@ -335,6 +335,7 @@ field = [
         ]
 
 res, x_moves, o_moves = play_game(algo, algo2)
+
 
 def dummy_data():
     data = []
