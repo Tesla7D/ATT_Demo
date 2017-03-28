@@ -373,7 +373,7 @@ dummy = dummy_data()
 data_array = np.array(data)
 ai = AI(cell_X, column(dummy, 0), column(dummy, 1))
 
-export_pdf(ai.clf, feature_names, target_names, "X_0.pdf")
+# export_pdf(ai.clf, feature_names, target_names, "X_0.pdf")
 
 human = Human(cell_0)
 # print(play_game(human, ai))
@@ -385,7 +385,7 @@ human.order = cell_X
 
 ai_win = algo_win = draw_c = 0
 test_ai = AI(cell_X, column(dummy, 0), column(dummy, 1))
-test_algo = Algorithm(cell_0, 50)
+test_algo = Algorithm(cell_0, 100)
 data = []
 for i in range(1000):
     result, ai_moves, algo_moves = play_game(test_ai, test_algo)
@@ -416,6 +416,7 @@ for i in range(1000):
         test_algo.order = cell_X
 
 print("AI wins: {}; Algorithm wins {}; Draws {}".format(ai_win, algo_win, draw_c))
+export_pdf(test_ai.clf, feature_names, target_names, "X_0.pdf")
 
 test_ai.order = cell_0
 human.order = cell_X
